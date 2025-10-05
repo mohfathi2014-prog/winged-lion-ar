@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Winged Lion — دكتور محمد</title>
+  <style>
+    html,body { height:100%; margin:0; background:transparent; }
+    #container { width:100%; height:100vh; position:relative; }
+    .ui { position: absolute; left:12px; top:12px; z-index:5; background: rgba(0,0,0,0.35); padding:8px; border-radius:8px; color:#fff; font-family: Arial, sans-serif; }
+    .ui label{ display:block; font-size:13px; margin-bottom:6px }
+    .ui input[type=range]{ width:160px }
+    .btn { background:#2b6; border:none; padding:8px 10px; border-radius:6px; cursor:pointer; font-weight:600; }
+    .notice { position:absolute; right:12px; top:12px; z-index:6; background:rgba(0,0,0,0.45); color:#fff; padding:8px; border-radius:8px; font-family:Arial, sans-serif; }
+    .credits { position: absolute; right:10px; bottom:10px; color:#ddd; font-size:12px; font-family:Arial, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <div class="ui" id="controls" aria-hidden="false">
+    <label>سرعة الحركة: <span id="speedVal">1.0</span></label>
+    <input id="speed" type="range" min="0" max="3" step="0.01" value="1">
+    <label>حجم الموديل: <span id="scaleVal">1.0</span></label>
+    <input id="scale" type="range" min="0.3" max="2" step="0.01" value="1">
+    <div style="margin-top:8px;">
+      <button id="playBtn" class="btn">تشغيل الصوت (لو لم يبدأ تلقائياً)</button>
+    </div>
+  </div>
+  <div class="notice" id="notice">أحاول تشغيل الصوت تلقائيًا... إذا لم يعمل، اضغط "تشغيل الصوت".</div>
+  <div class="credits">مُعد بواسطة ميشو — دكتور محمد</div>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/examples/js/controls/OrbitControls.min.js"></script>
+
+<script>
+// Scene setup (transparent background)
+const container = document.getElementById('container');
+const scene = new THREE.Scene();
+scene.background = null; // transparent
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0, 2.4, 6);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+container.appendChild(renderer.domElement);
+
+// Controls
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0,1,0);
+controls.enableDamping = true;
+
+// Lighting (for a more 'realistic' PBR look)
+const envLight = new THREE.HemisphereLight(0xffffff, 0x222233, 0.7); scene.add(envLight);
+const key = new THREE.DirectionalLight(0xffffff, 1.1); key.position.set(5,10,6); key.castShadow = true; scene.add(key);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.25); rim.position.set(-6,4,-2); scene.add(rim);
+
+// Ground (invisible but catches shadow-like contact)
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40), new THREE.MeshStandardMaterial({ color:0x000000, transparent:true, opacity:0.0 }));
+ground.rotation.x = -Math.PI/2; ground.position.y = 0; scene.add(ground);
+
+// Materials (attempt at realistic tones)
+const furMat = new THREE.MeshStandardMaterial({ color:0xb98852, metalness:0.05, roughness:0.7 });
+const darkMat = new THREE.MeshStandardMaterial({ color:0x1b1b1b, roughness:0.6 });
+const maneMat = new THREE.MeshStandardMaterial({ color:0x6b3f15, metalness:0.02, roughness:0.8 });
+
+// Creature group
+const creature = new THREE.Group(); creature.position.y = 0.9; scene.add(creature);
+
+// Body (ellipsoid)
+const body = new THREE.Mesh(new THREE.SphereGeometry(0.95, 48, 36), furMat);
+body.scale.set(1.45, 0.95, 0.95); creature.add(body);
+
+// Head (more defined snout)
+const headGroup = new THREE.Group(); headGroup.position.set(1.12, 0.28, 0); creature.add(headGroup);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 36, 28), furMat);
+head.position.set(0,0,0); headGroup.add(head);
+// snout
+const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.46,16), darkMat);
+snout.rotation.z = Math.PI/2; snout.position.set(0.26, -0.05, 0); headGroup.add(snout);
+// mane - layered cones for fuller look
+const mane = new THREE.Group();
+for(let r=0;r<3;r++){
+  for(let i=0;i<18;i++){
+    const c = new THREE.ConeGeometry(0.16 - r*0.03, 0.36 - r*0.05, 10);
+    const m = new THREE.Mesh(c, maneMat);
+    const a = i/18*Math.PI*2;
+    m.position.set(Math.cos(a)*(0.46 + r*0.06), -0.05 - r*0.04, Math.sin(a)*0.18);
+    m.rotation.z = a + Math.PI/2;
+    m.rotation.x = -0.2 - r*0.05;
+    mane.add(m);
+  }
+}
+mane.position.set(0, -0.02, 0);
+headGroup.add(mane);
+
+// Eyes and nose
+const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.045,8,8), darkMat); eyeL.position.set(0.12,0.06,0.12);
+const eyeR = eyeL.clone(); eyeR.position.z = -0.12; headGroup.add(eyeL, eyeR);
+const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05,10,8), darkMat); nose.position.set(0.28,-0.06,0); headGroup.add(nose);
+
+// Legs
+const legGeom = new THREE.CylinderGeometry(0.12,0.14,0.9,14);
+for(let i=0;i<4;i++){
+  const leg = new THREE.Mesh(legGeom, furMat);
+  const x = (i<2)?0.55:-0.55;
+  const z = (i%2===0)?0.36:-0.36;
+  leg.position.set(x,-0.55,z); leg.rotation.x = 0.05; creature.add(leg);
+}
+
+// Tail (curved chain of segments)
+const tail = new THREE.Group(); tail.position.set(-1.05,-0.1,0); creature.add(tail);
+for(let i=0;i<4;i++){
+  const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.06 - i*0.01, 0.07 - i*0.01, 0.36, 10), furMat);
+  seg.position.set(-0.18*i, -0.02 - i*0.03, 0); seg.rotation.z = -0.15 + i*0.03; tail.add(seg);
+}
+
+// Wings: layered feathers for nicer silhouette
+function makeWing(side){
+  const wing = new THREE.Group();
+  const root = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.12,0.12), furMat);
+  root.position.set(side*0.78,0.16,0); wing.add(root);
+  const feathers = new THREE.Group();
+  for(let i=0;i<9;i++){
+    const w = new THREE.BoxGeometry(1.0 - i*0.08, 0.12, 0.12);
+    const m = new THREE.Mesh(w, maneMat);
+    m.position.set((0.48 - i*0.12)*side, -0.06 - i*0.03, i*0.03*side);
+    m.rotation.y = -0.15*side - i*0.04*side;
+    feathers.add(m);
+  }
+  feathers.position.set(side*0.12, -0.06, 0);
+  feathers.rotation.z = side*0.20;
+  wing.add(feathers);
+  wing.userData = { root, feathers };
+  return wing;
+}
+const leftWing = makeWing(1); const rightWing = makeWing(-1);
+creature.add(leftWing); creature.add(rightWing);
+
+// Animation params
+let clock = new THREE.Clock();
+let speed = 1.0;
+
+// UI
+const speedSlider = document.getElementById('speed'); const speedVal = document.getElementById('speedVal');
+speedSlider.addEventListener('input', (e)=>{ speed = parseFloat(e.target.value); speedVal.textContent = speed.toFixed(2); });
+const scaleSlider = document.getElementById('scale'); const scaleVal = document.getElementById('scaleVal');
+scaleSlider.addEventListener('input', (e)=>{ const s = parseFloat(e.target.value); creature.scale.set(s,s,s); scaleVal.textContent = s.toFixed(2); });
+
+// Responsive
+window.addEventListener('resize', ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+// Animation loop
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime() * speed;
+
+  // head yaw left-right
+  headGroup.rotation.y = Math.sin(t*0.9) * 0.38;
+
+  // flap wings
+  const wingAmp = Math.sin(t*3) * 0.9 + 0.6;
+  leftWing.rotation.z = 0.25 + wingAmp*0.34;
+  rightWing.rotation.z = -0.25 - wingAmp*0.34;
+
+  // gentle body spin + occasional full rotation
+  creature.rotation.y = Math.sin(t*0.25) * 0.25 + Math.sin(t*0.12) * 0.05;
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// -------- WebAudio: synthesized roar (no external audio file) --------
+// Builds a short 'roar' using filtered noise + pitch sweep + reverb-ish delay.
+// We'll attempt autoplay; if blocked we'll provide a button.
+let audioCtx = null;
+let masterGain = null;
+
+function createRoar() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.9;
+  masterGain.connect(audioCtx.destination);
+
+  // noise source
+  const bufferSize = audioCtx.sampleRate * 1.2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.8));
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+
+  // lowpass filter to make it roar-like
+  const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass";
+  lp.frequency.value = 1200;
+  lp.Q.value = 0.7;
+
+  // pitch sweep: oscillator for tonal moan
+  const osc = audioCtx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = 180;
+  const oscGain = audioCtx.createGain(); oscGain.gain.value = 0.6;
+
+  // slow pitch sweep
+  const now = audioCtx.currentTime;
+  osc.frequency.setValueAtTime(300, now);
+  osc.frequency.exponentialRampToValueAtTime(80, now + 1.6);
+
+  // delay for spaciousness
+  const delay = audioCtx.createDelay(); delay.delayTime.value = 0.12;
+  const fb = audioCtx.createGain(); fb.gain.value = 0.35;
+  delay.connect(fb); fb.connect(delay);
+
+  // connect chain: noise -> lp -> gain -> master
+  noise.connect(lp);
+  lp.connect(masterGain);
+  osc.connect(oscGain);
+  oscGain.connect(masterGain);
+  masterGain.connect(delay);
+  delay.connect(masterGain);
+
+  // envelope shaping
+  const g = audioCtx.createGain(); g.gain.value = 1.0;
+  masterGain.gain.setValueAtTime(0.0001, now);
+  masterGain.gain.exponentialRampToValueAtTime(0.9, now + 0.05);
+  masterGain.gain.exponentialRampToValueAtTime(0.3, now + 1.4);
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.8);
+
+  noise.start(now);
+  osc.start(now);
+  noise.stop(now + 2.8);
+  osc.stop(now + 2.8);
+}
+
+// Attempt autoplay on load
+async function tryPlayAuto() {
+  try {
+    // create context and play immediately
+    createRoar();
+    document.getElementById('notice').textContent = "الصوت شغّل تلقائيًا.";
+  } catch (err) {
+    // likely autoplay blocked or context not allowed yet
+    document.getElementById('notice').textContent = "المتصفح منع التشغيل التلقائي. اضغط زر 'تشغيل الصوت'.";
+    console.log('autoplay blocked or failed:', err);
+  }
+}
+
+// Play button fallback
+document.getElementById('playBtn').addEventListener('click', async ()=>{
+  try {
+    if (!audioCtx) createRoar();
+    // resume context if suspended
+    if (audioCtx.state === 'suspended' && audioCtx.resume) await audioCtx.resume();
+    document.getElementById('notice').textContent = "الصوت شغّل.";
+  } catch(e){ console.error(e); document.getElementById('notice').textContent = "فشل تشغيل الصوت."; }
+});
+
+// Try autoplay shortly after load (browser may still block; this is best-effort)
+window.addEventListener('load', ()=>{
+  // Some browsers require a user gesture. We attempt anyway; if blocked, button will work.
+  tryPlayAuto();
+});
+</script>
+</body>
+</html>
